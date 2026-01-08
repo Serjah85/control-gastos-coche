@@ -1,0 +1,1265 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Controla todos los gastos de tu coche: combustible, mantenimiento, ITV, seguro e impuestos. Calcula el coste real por kilómetro.">
+    <meta name="theme-color" content="#1e3c72">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Gastos Coche">
+    <link rel="manifest" href="./manifest.json">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect fill='%231e3c72' width='512' height='512'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dominant-baseline='central' font-size='300' fill='white'%3E🚗%3C/text%3E%3C/svg%3E">
+    <title>Control Gastos Coche 2026</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .app-container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            color: #1e3c72;
+            font-size: 28px;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .metric-card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border-left: 4px solid;
+        }
+
+        .metric-card.total { border-left-color: #e74c3c; }
+        .metric-card.cashback { border-left-color: #f39c12; }
+        .metric-card.real { border-left-color: #27ae60; }
+        .metric-card.km { border-left-color: #3498db; }
+        .metric-card.cost-per-km { border-left-color: #9b59b6; }
+
+        .metric-label {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .metric-value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        .metric-value.positive {
+            color: #27ae60;
+        }
+
+        .card {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .card h2 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+
+        .category-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            color: white;
+        }
+
+        .category-fuel { background: #3498db; }
+        .category-maintenance { background: #e67e22; }
+        .category-itv { background: #27ae60; }
+        .category-insurance { background: #9b59b6; }
+        .category-tax { background: #34495e; }
+        .category-other { background: #95a5a6; }
+
+        .payment-method-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+
+        .payment-ing { background: #ff6200; color: white; }
+        .payment-carrefour { background: #0057a0; color: white; }
+        .payment-bp { background: #009639; color: white; }
+        .payment-repsol { background: #fbba00; color: #333; }
+        .payment-moeve { background: #00aeef; color: white; }
+        .payment-shell { background: #dd1d21; color: white; }
+        .payment-other { background: #e0e0e0; color: #555; }
+
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #2980b9;
+        }
+
+        button.secondary {
+            background: #95a5a6;
+        }
+
+        button.secondary:hover {
+            background: #7f8c8d;
+        }
+
+        button.danger {
+            background: #e74c3c;
+        }
+
+        button.danger:hover {
+            background: #c0392b;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .expense-list {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .expense-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 4px solid;
+        }
+
+        .expense-item.fuel { border-left-color: #3498db; }
+        .expense-item.maintenance { border-left-color: #e67e22; }
+        .expense-item.itv { border-left-color: #27ae60; }
+        .expense-item.insurance { border-left-color: #9b59b6; }
+        .expense-item.tax { border-left-color: #34495e; }
+        .expense-item.other { border-left-color: #95a5a6; }
+
+        .expense-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .expense-date {
+            font-size: 13px;
+            color: #666;
+        }
+
+        .expense-amount {
+            font-size: 18px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        .expense-details {
+            font-size: 13px;
+            color: #555;
+            margin-top: 8px;
+        }
+
+        .expense-actions {
+            margin-top: 10px;
+            display: flex;
+            gap: 8px;
+        }
+
+        .expense-actions button {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        .preview-box {
+            background: #f0f7ff;
+            border: 2px dashed #3498db;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        .preview-box h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+
+        .preview-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .preview-row:last-child {
+            border-bottom: none;
+            font-weight: bold;
+            font-size: 16px;
+            color: #27ae60;
+            padding-top: 12px;
+            margin-top: 8px;
+            border-top: 2px solid #27ae60;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+            flex-wrap: wrap;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            background: none;
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            color: #666;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            color: #3498db;
+            border-bottom-color: #3498db;
+        }
+
+        .tab:hover {
+            color: #3498db;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        .info-text {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+            font-style: italic;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .stat-box {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+        }
+
+        .stat-box .label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+
+        .stat-box .value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        @media (max-width: 768px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+
+            .button-group {
+                flex-direction: column;
+            }
+
+            .button-group button {
+                width: 100%;
+            }
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .file-upload-label {
+            display: inline-block;
+        }
+
+        .footer {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-top: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        .coffee-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 25px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 14px;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 8px rgba(243, 156, 18, 0.3);
+        }
+
+        .coffee-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(243, 156, 18, 0.4);
+        }
+
+        .footer-text {
+            color: #666;
+            font-size: 13px;
+            margin-bottom: 15px;
+            line-height: 1.6;
+        }
+
+        .install-banner {
+            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .install-banner.hidden {
+            display: none;
+        }
+
+        .install-banner-text {
+            flex: 1;
+            font-size: 14px;
+        }
+
+        .install-banner-btn {
+            background: white;
+            color: #3498db;
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+
+        .install-banner-close {
+            background: transparent;
+            color: white;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 0 5px;
+            opacity: 0.8;
+        }
+
+        .install-banner-close:hover {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div class="header">
+            <h1>🚗 Control de Gastos del Coche</h1>
+            <p>Año 2026 - Kilometraje actual: <span id="currentKm">0</span> km</p>
+        </div>
+
+        <!-- Dashboard -->
+        <div class="dashboard">
+            <div class="metric-card total">
+                <div class="metric-label">Total Pagado</div>
+                <div class="metric-value" id="totalPaid">0.00 €</div>
+            </div>
+            <div class="metric-card cashback">
+                <div class="metric-label">Total Cashback</div>
+                <div class="metric-value positive" id="totalCashback">-0.00 €</div>
+            </div>
+            <div class="metric-card real">
+                <div class="metric-label">Coste Real Final</div>
+                <div class="metric-value" id="realCost">0.00 €</div>
+            </div>
+            <div class="metric-card km">
+                <div class="metric-label">Kilómetros</div>
+                <div class="metric-value" id="totalKm">0 km</div>
+            </div>
+            <div class="metric-card cost-per-km">
+                <div class="metric-label">Coste por Km</div>
+                <div class="metric-value" id="costPerKm">0.000 €/km</div>
+            </div>
+        </div>
+
+        <!-- Tabs y contenido -->
+        <div class="card">
+            <div class="tabs">
+                <button class="tab active" onclick="showTab('add')">
+                    <span id="addTabLabel">➕ Añadir Gasto</span>
+                </button>
+                <button class="tab" onclick="showTab('list')">
+                    📋 Lista de Gastos
+                </button>
+                <button class="tab" onclick="showTab('stats')">
+                    📊 Estadísticas
+                </button>
+            </div>
+
+            <!-- Formulario Añadir/Editar -->
+            <div id="tabAdd" class="tab-content">
+                <form id="expenseForm" onsubmit="handleSubmit(event)">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Fecha</label>
+                            <input type="date" id="date" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Categoría</label>
+                            <select id="category" onchange="toggleFuelFields()">
+                                <option value="fuel">⛽ Combustible</option>
+                                <option value="maintenance">🔧 Mantenimiento</option>
+                                <option value="itv">✅ ITV</option>
+                                <option value="insurance">🛡️ Seguro</option>
+                                <option value="tax">📋 Impuestos</option>
+                                <option value="other">📌 Otros</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Descripción</label>
+                        <input type="text" id="description" placeholder="Ej: Repostaje Repsol, Cambio aceite, etc.">
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Importe Pagado (€)</label>
+                            <input type="number" step="0.01" id="amount" required oninput="updatePreview()">
+                        </div>
+                        <div class="form-group">
+                            <label>Kilometraje</label>
+                            <input type="number" id="odometer" required placeholder="Ej: 85432">
+                        </div>
+                    </div>
+
+                    <!-- Campos específicos de combustible -->
+                    <div id="fuelFields">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Litros</label>
+                                <input type="number" step="0.01" id="liters" placeholder="Ej: 45.50">
+                            </div>
+                            <div class="form-group">
+                                <label>Precio/Litro Visible (€)</label>
+                                <input type="number" step="0.001" id="pricePerLiter" placeholder="Ej: 1.459">
+                                <div class="info-text">Precio que aparece en la gasolinera</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Método de Pago</label>
+                        <select id="paymentMethod" onchange="updatePreview()">
+                            <option value="other">Otro</option>
+                            <option value="ing">ING (3% cashback)</option>
+                            <option value="carrefour">Carrefour (puntos)</option>
+                            <option value="bp">BP Plus</option>
+                            <option value="repsol">Repsol Waylet</option>
+                            <option value="moeve">MOEVE Club (antes Cepsa)</option>
+                            <option value="shell">Shell Smart</option>
+                        </select>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Descuento Inmediato (€)</label>
+                            <input type="number" step="0.01" id="immediateDiscount" value="0" oninput="updatePreview()">
+                            <div class="info-text">Descuento aplicado en el momento</div>
+                        </div>
+                        <div class="form-group">
+                            <label>Cashback Diferido (€)</label>
+                            <input type="number" step="0.01" id="deferredCashback" value="0" oninput="updatePreview()">
+                            <div class="info-text">Puntos Carrefour u otros programas</div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Notas</label>
+                        <textarea id="notes" rows="3" placeholder="Cualquier anotación adicional..."></textarea>
+                    </div>
+
+                    <!-- Vista previa -->
+                    <div id="previewBox" class="preview-box hidden">
+                        <h3>Vista Previa del Gasto</h3>
+                        <div id="previewContent"></div>
+                    </div>
+
+                    <div class="button-group">
+                        <button type="submit" id="submitBtn">➕ Añadir Gasto</button>
+                        <button type="button" class="secondary" id="cancelBtn" onclick="cancelEdit()" style="display: none;">❌ Cancelar</button>
+                        <button type="button" class="secondary" onclick="exportToExcel()">📊 Exportar Excel</button>
+                        <label class="file-upload-label">
+                            <button type="button" class="secondary">📥 Importar Excel</button>
+                            <input type="file" id="importFile" accept=".xlsx,.xls" onchange="importFromExcel(event)">
+                        </label>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Lista de gastos -->
+            <div id="tabList" class="tab-content hidden">
+                <div id="expensesList"></div>
+            </div>
+
+            <!-- Estadísticas -->
+            <div id="tabStats" class="tab-content hidden">
+                <div id="statsContent"></div>
+            </div>
+        </div>
+
+        <!-- Banner de instalación PWA -->
+        <div id="installBanner" class="install-banner hidden">
+            <div class="install-banner-text">
+                📱 <strong>Instala la app</strong> en tu móvil para acceso rápido
+            </div>
+            <button class="install-banner-btn" onclick="installPWA()">Instalar</button>
+            <button class="install-banner-close" onclick="closeInstallBanner()">×</button>
+        </div>
+
+        <!-- Footer con botón de café -->
+        <div class="footer">
+            <div class="footer-text">
+                ¿Te está ayudando a ahorrar en gasolina? 🚗💰<br>
+                Si te resulta útil, puedes invitarme a un café
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                <a href="https://paypal.me/AlbertoColladoPuebla" target="_blank" class="coffee-btn" rel="noopener">
+                    💳 PayPal
+                </a>
+                <a href="https://github.com/sponsors/Serja85" target="_blank" class="coffee-btn" rel="noopener" style="background: linear-gradient(135deg, #6e5494 0%, #5a4372 100%); box-shadow: 0 4px 8px rgba(110, 84, 148, 0.3);">
+                    ⭐ GitHub Sponsors
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <script>
+        // Configuración
+        const CATEGORIES = {
+            fuel: { label: 'Combustible', color: '#3498db', icon: '⛽' },
+            maintenance: { label: 'Mantenimiento', color: '#e67e22', icon: '🔧' },
+            itv: { label: 'ITV', color: '#27ae60', icon: '✅' },
+            insurance: { label: 'Seguro', color: '#9b59b6', icon: '🛡️' },
+            tax: { label: 'Impuestos', color: '#34495e', icon: '📋' },
+            other: { label: 'Otros', color: '#95a5a6', icon: '📌' }
+        };
+
+        const PAYMENT_METHODS = {
+            ing: { label: 'ING (3% cashback)', cashback: 0.03, color: '#ff6200' },
+            carrefour: { label: 'Carrefour (puntos)', cashback: 0, color: '#0057a0', deferred: true },
+            bp: { label: 'BP Plus', cashback: 0, color: '#009639', deferred: true },
+            repsol: { label: 'Repsol Waylet', cashback: 0, color: '#fbba00', deferred: true },
+            moeve: { label: 'MOEVE Club', cashback: 0, color: '#00aeef', deferred: true },
+            shell: { label: 'Shell Smart', cashback: 0, color: '#dd1d21', deferred: true },
+            other: { label: 'Otro', cashback: 0, color: '#95a5a6' }
+        };
+
+        // Estado
+        let expenses = [];
+        let currentOdometer = 0;
+        let editingId = null;
+
+        // Cargar datos
+        function loadData() {
+            const savedExpenses = localStorage.getItem('carExpenses2026');
+            const savedOdometer = localStorage.getItem('carCurrentOdometer');
+            
+            if (savedExpenses) {
+                expenses = JSON.parse(savedExpenses);
+            }
+            if (savedOdometer) {
+                currentOdometer = parseFloat(savedOdometer);
+            }
+
+            // Inicializar fecha
+            document.getElementById('date').valueAsDate = new Date();
+            
+            updateDashboard();
+            renderExpensesList();
+            renderStats();
+        }
+
+        // Guardar datos
+        function saveData() {
+            localStorage.setItem('carExpenses2026', JSON.stringify(expenses));
+            localStorage.setItem('carCurrentOdometer', currentOdometer.toString());
+        }
+
+        // Calcular cashback automático
+        function calculateAutoCashback(amount, paymentMethod) {
+            const method = PAYMENT_METHODS[paymentMethod];
+            return method && method.cashback > 0 ? amount * method.cashback : 0;
+        }
+
+        // Actualizar dashboard
+        function updateDashboard() {
+            const totalPaid = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+            
+            const totalImmediateDiscount = expenses.reduce((sum, exp) => sum + exp.immediateDiscount, 0);
+            const totalAutoCashback = expenses.reduce((sum, exp) => sum + calculateAutoCashback(exp.amount, exp.paymentMethod), 0);
+            const totalDeferredCashback = expenses.reduce((sum, exp) => sum + exp.deferredCashback, 0);
+            const totalCashback = totalImmediateDiscount + totalAutoCashback + totalDeferredCashback;
+            
+            const realCost = totalPaid - totalCashback;
+            
+            const minOdometer = expenses.length > 0 ? Math.min(...expenses.map(e => e.odometer)) : 0;
+            const totalKm = currentOdometer - minOdometer;
+            const costPerKm = totalKm > 0 ? realCost / totalKm : 0;
+
+            document.getElementById('currentKm').textContent = currentOdometer.toFixed(0);
+            document.getElementById('totalPaid').textContent = totalPaid.toFixed(2) + ' €';
+            document.getElementById('totalCashback').textContent = '-' + totalCashback.toFixed(2) + ' €';
+            document.getElementById('realCost').textContent = realCost.toFixed(2) + ' €';
+            document.getElementById('totalKm').textContent = totalKm.toFixed(0) + ' km';
+            document.getElementById('costPerKm').textContent = costPerKm.toFixed(3) + ' €/km';
+        }
+
+        // Actualizar vista previa
+        function updatePreview() {
+            const amount = parseFloat(document.getElementById('amount').value) || 0;
+            const immediateDiscount = parseFloat(document.getElementById('immediateDiscount').value) || 0;
+            const deferredCashback = parseFloat(document.getElementById('deferredCashback').value) || 0;
+            const paymentMethod = document.getElementById('paymentMethod').value;
+            const liters = parseFloat(document.getElementById('liters').value) || 0;
+            const category = document.getElementById('category').value;
+
+            if (amount === 0) {
+                document.getElementById('previewBox').classList.add('hidden');
+                return;
+            }
+
+            const autoCashback = calculateAutoCashback(amount, paymentMethod);
+            const totalCashback = immediateDiscount + autoCashback + deferredCashback;
+            const realCost = amount - totalCashback;
+
+            let html = `
+                <div class="preview-row">
+                    <span>Importe pagado:</span>
+                    <span>${amount.toFixed(2)} €</span>
+                </div>
+            `;
+
+            if (immediateDiscount > 0) {
+                html += `
+                    <div class="preview-row">
+                        <span>- Descuento inmediato:</span>
+                        <span>-${immediateDiscount.toFixed(2)} €</span>
+                    </div>
+                `;
+            }
+
+            if (autoCashback > 0) {
+                const percentage = (PAYMENT_METHODS[paymentMethod].cashback * 100).toFixed(0);
+                html += `
+                    <div class="preview-row">
+                        <span>- Cashback automático (${percentage}%):</span>
+                        <span>-${autoCashback.toFixed(2)} €</span>
+                    </div>
+                `;
+            }
+
+            if (deferredCashback > 0) {
+                html += `
+                    <div class="preview-row">
+                        <span>- Cashback diferido:</span>
+                        <span>-${deferredCashback.toFixed(2)} €</span>
+                    </div>
+                `;
+            }
+
+            html += `
+                <div class="preview-row">
+                    <span><strong>Coste Real:</strong></span>
+                    <span><strong>${realCost.toFixed(2)} €</strong></span>
+                </div>
+            `;
+
+            if (category === 'fuel' && liters > 0) {
+                const realPricePerLiter = realCost / liters;
+                html += `
+                    <div class="preview-row">
+                        <span>Precio real por litro:</span>
+                        <span>${realPricePerLiter.toFixed(3)} €/L</span>
+                    </div>
+                `;
+            }
+
+            document.getElementById('previewContent').innerHTML = html;
+            document.getElementById('previewBox').classList.remove('hidden');
+        }
+
+        // Toggle campos de combustible
+        function toggleFuelFields() {
+            const category = document.getElementById('category').value;
+            document.getElementById('fuelFields').style.display = category === 'fuel' ? 'block' : 'none';
+        }
+
+        // Manejar submit del formulario
+        function handleSubmit(event) {
+            event.preventDefault();
+
+            const formData = {
+                date: document.getElementById('date').value,
+                category: document.getElementById('category').value,
+                description: document.getElementById('description').value,
+                amount: parseFloat(document.getElementById('amount').value),
+                odometer: parseFloat(document.getElementById('odometer').value),
+                paymentMethod: document.getElementById('paymentMethod').value,
+                immediateDiscount: parseFloat(document.getElementById('immediateDiscount').value) || 0,
+                deferredCashback: parseFloat(document.getElementById('deferredCashback').value) || 0,
+                liters: parseFloat(document.getElementById('liters').value) || 0,
+                pricePerLiter: parseFloat(document.getElementById('pricePerLiter').value) || 0,
+                notes: document.getElementById('notes').value
+            };
+
+            if (editingId !== null) {
+                // Actualizar
+                const index = expenses.findIndex(e => e.id === editingId);
+                expenses[index] = { ...expenses[index], ...formData, updatedAt: new Date().toISOString() };
+                editingId = null;
+            } else {
+                // Añadir nuevo
+                formData.id = Date.now();
+                formData.createdAt = new Date().toISOString();
+                expenses.push(formData);
+            }
+
+            // Ordenar por fecha
+            expenses.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            // Actualizar kilometraje actual
+            currentOdometer = formData.odometer;
+
+            saveData();
+            updateDashboard();
+            renderExpensesList();
+            renderStats();
+            resetForm();
+        }
+
+        // Reset formulario
+        function resetForm() {
+            document.getElementById('expenseForm').reset();
+            document.getElementById('date').valueAsDate = new Date();
+            document.getElementById('category').value = 'fuel';
+            document.getElementById('paymentMethod').value = 'other';
+            document.getElementById('immediateDiscount').value = '0';
+            document.getElementById('deferredCashback').value = '0';
+            document.getElementById('previewBox').classList.add('hidden');
+            document.getElementById('submitBtn').textContent = '➕ Añadir Gasto';
+            document.getElementById('addTabLabel').textContent = '➕ Añadir Gasto';
+            document.getElementById('cancelBtn').style.display = 'none';
+            editingId = null;
+            toggleFuelFields();
+        }
+
+        // Editar gasto
+        function editExpense(id) {
+            const expense = expenses.find(e => e.id === id);
+            if (!expense) return;
+
+            editingId = id;
+
+            document.getElementById('date').value = expense.date;
+            document.getElementById('category').value = expense.category;
+            document.getElementById('description').value = expense.description;
+            document.getElementById('amount').value = expense.amount;
+            document.getElementById('odometer').value = expense.odometer;
+            document.getElementById('paymentMethod').value = expense.paymentMethod;
+            document.getElementById('immediateDiscount').value = expense.immediateDiscount;
+            document.getElementById('deferredCashback').value = expense.deferredCashback;
+            document.getElementById('liters').value = expense.liters || '';
+            document.getElementById('pricePerLiter').value = expense.pricePerLiter || '';
+            document.getElementById('notes').value = expense.notes || '';
+
+            document.getElementById('submitBtn').textContent = '✅ Actualizar Gasto';
+            document.getElementById('addTabLabel').textContent = '✏️ Editar Gasto';
+            document.getElementById('cancelBtn').style.display = 'inline-block';
+
+            toggleFuelFields();
+            updatePreview();
+            showTab('add');
+        }
+
+        // Cancelar edición
+        function cancelEdit() {
+            resetForm();
+        }
+
+        // Eliminar gasto
+        function deleteExpense(id) {
+            if (!confirm('¿Seguro que quieres eliminar este gasto?')) return;
+
+            expenses = expenses.filter(e => e.id !== id);
+            saveData();
+            updateDashboard();
+            renderExpensesList();
+            renderStats();
+        }
+
+        // Renderizar lista de gastos
+        function renderExpensesList() {
+            const container = document.getElementById('expensesList');
+
+            if (expenses.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📝</div>
+                        <p>No hay gastos registrados todavía</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = expenses.map(expense => {
+                const method = PAYMENT_METHODS[expense.paymentMethod];
+                const autoCashback = calculateAutoCashback(expense.amount, expense.paymentMethod);
+                const totalCashback = expense.immediateDiscount + autoCashback + expense.deferredCashback;
+                const realCost = expense.amount - totalCashback;
+                const category = CATEGORIES[expense.category];
+
+                let detailsHtml = `
+                    💳 Pagado: ${expense.amount.toFixed(2)} € | 
+                    💰 Cashback: -${totalCashback.toFixed(2)} € | 
+                    ✅ Real: ${realCost.toFixed(2)} €
+                `;
+
+                if (expense.category === 'fuel' && expense.liters > 0) {
+                    const realPricePerLiter = realCost / expense.liters;
+                    detailsHtml += `<br>⛽ ${expense.liters.toFixed(2)} L | Precio visible: ${expense.pricePerLiter.toFixed(3)} €/L | Precio real: ${realPricePerLiter.toFixed(3)} €/L`;
+                }
+
+                return `
+                    <div class="expense-item ${expense.category}">
+                        <div class="expense-header">
+                            <div>
+                                <span class="category-badge category-${expense.category}">
+                                    ${category.icon} ${category.label}
+                                </span>
+                                <span class="payment-method-badge payment-${expense.paymentMethod}">
+                                    ${method.label}
+                                </span>
+                            </div>
+                            <div class="expense-amount">${realCost.toFixed(2)} €</div>
+                        </div>
+                        <div class="expense-date">📅 ${expense.date} | 🛣️ ${expense.odometer} km</div>
+                        ${expense.description ? `<div class="expense-details"><strong>${expense.description}</strong></div>` : ''}
+                        <div class="expense-details">${detailsHtml}</div>
+                        ${expense.notes ? `<div class="expense-details" style="font-style: italic; margin-top: 8px;">📝 ${expense.notes}</div>` : ''}
+                        <div class="expense-actions">
+                            <button class="secondary" onclick="editExpense(${expense.id})">✏️ Editar</button>
+                            <button class="danger" onclick="deleteExpense(${expense.id})">🗑️ Eliminar</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Renderizar estadísticas
+        function renderStats() {
+            const container = document.getElementById('statsContent');
+
+            if (expenses.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📊</div>
+                        <p>No hay datos suficientes para mostrar estadísticas</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // Calcular estadísticas
+            const totalPaid = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+            const totalCashback = expenses.reduce((sum, exp) => {
+                const autoCashback = calculateAutoCashback(exp.amount, exp.paymentMethod);
+                return sum + exp.immediateDiscount + autoCashback + exp.deferredCashback;
+            }, 0);
+            const realCost = totalPaid - totalCashback;
+            const avgExpense = realCost / expenses.length;
+            const cashbackPercent = totalPaid > 0 ? (totalCashback / totalPaid) * 100 : 0;
+
+            // Estadísticas por categoría
+            const byCategory = Object.keys(CATEGORIES).map(cat => {
+                const catExpenses = expenses.filter(e => e.category === cat);
+                const total = catExpenses.reduce((sum, e) => {
+                    const autoCashback = calculateAutoCashback(e.amount, e.paymentMethod);
+                    const cashback = e.immediateDiscount + autoCashback + e.deferredCashback;
+                    return sum + (e.amount - cashback);
+                }, 0);
+
+                return {
+                    category: CATEGORIES[cat],
+                    count: catExpenses.length,
+                    total: total
+                };
+            }).filter(item => item.count > 0);
+
+            // Estadísticas de combustible
+            const fuelExpenses = expenses.filter(e => e.category === 'fuel' && e.liters > 0);
+            const avgFuelPrice = fuelExpenses.length > 0 ? 
+                fuelExpenses.reduce((sum, e) => {
+                    const autoCashback = calculateAutoCashback(e.amount, e.paymentMethod);
+                    const cashback = e.immediateDiscount + autoCashback + e.deferredCashback;
+                    const realCost = e.amount - cashback;
+                    return sum + (realCost / e.liters);
+                }, 0) / fuelExpenses.length : 0;
+
+            let html = `
+                <h3>Estadísticas Generales</h3>
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="label">Gastos Registrados</div>
+                        <div class="value">${expenses.length}</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="label">Gasto Medio</div>
+                        <div class="value">${avgExpense.toFixed(2)} €</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="label">% Cashback Total</div>
+                        <div class="value">${cashbackPercent.toFixed(1)}%</div>
+                    </div>
+                    ${fuelExpenses.length > 0 ? `
+                        <div class="stat-box">
+                            <div class="label">Repostajes</div>
+                            <div class="value">${fuelExpenses.length}</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="label">Precio Medio Real</div>
+                            <div class="value">${avgFuelPrice.toFixed(3)} €/L</div>
+                        </div>
+                    ` : ''}
+                </div>
+
+                <h3 style="margin-top: 30px;">Por Categoría</h3>
+                <div class="stats-grid">
+                    ${byCategory.map(item => `
+                        <div class="stat-box" style="border-left-color: ${item.category.color}">
+                            <div class="label">${item.category.icon} ${item.category.label}</div>
+                            <div class="value">${item.total.toFixed(2)} €</div>
+                            <div class="info-text">${item.count} gasto${item.count !== 1 ? 's' : ''}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+
+            container.innerHTML = html;
+        }
+
+        // Cambiar tab
+        function showTab(tabName) {
+            // Ocultar todos los tabs
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.add('hidden'));
+            document.querySelectorAll('.tab').forEach(btn => btn.classList.remove('active'));
+
+            // Mostrar el tab seleccionado
+            document.getElementById('tab' + tabName.charAt(0).toUpperCase() + tabName.slice(1)).classList.remove('hidden');
+            event.target.classList.add('active');
+
+            // Si vamos a stats, renderizar
+            if (tabName === 'stats') {
+                renderStats();
+            }
+        }
+
+        // Exportar a Excel
+        function exportToExcel() {
+            if (!window.XLSX) {
+                alert('La librería de Excel no está cargada. Por favor, recarga la página.');
+                return;
+            }
+
+            const wb = XLSX.utils.book_new();
+
+            // Hoja 1: Gastos detallados
+            const expensesData = expenses.map(exp => {
+                const method = PAYMENT_METHODS[exp.paymentMethod];
+                const autoCashback = calculateAutoCashback(exp.amount, exp.paymentMethod);
+                const totalCashback = exp.immediateDiscount + autoCashback + exp.deferredCashback;
+                const realCost = exp.amount - totalCashback;
+
+                return {
+                    'Fecha': exp.date,
+                    'Categoría': CATEGORIES[exp.category].label,
+                    'Descripción': exp.description,
+                    'Kilometraje': exp.odometer,
+                    'Importe Pagado': exp.amount.toFixed(2),
+                    'Método Pago': method.label,
+                    'Dto. Inmediato': exp.immediateDiscount.toFixed(2),
+                    'Cashback Auto': autoCashback.toFixed(2),
+                    'Cashback Diferido': exp.deferredCashback.toFixed(2),
+                    'Cashback Total': totalCashback.toFixed(2),
+                    'Coste Real': realCost.toFixed(2),
+                    'Litros': exp.liters || '',
+                    'Precio/L Visible': exp.pricePerLiter || '',
+                    'Precio/L Real': exp.liters > 0 ? (realCost / exp.liters).toFixed(3) : '',
+                    'Notas': exp.notes || ''
+                };
+            });
+            const ws1 = XLSX.utils.json_to_sheet(expensesData);
+            XLSX.utils.book_append_sheet(wb, ws1, 'Gastos Detallados');
+
+            // Descargar
+            const fecha = new Date().toISOString().split('T')[0];
+            XLSX.writeFile(wb, `Gastos_Coche_2026_${fecha}.xlsx`);
+        }
+
+        // Importar desde Excel
+        function importFromExcel(event) {
+            const file = event.target.files[0];
+            if (!file || !window.XLSX) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const wb = XLSX.read(e.target.result, { type: 'binary' });
+                    const wsname = wb.SheetNames[0];
+                    const ws = wb.Sheets[wsname];
+                    const data = XLSX.utils.sheet_to_json(ws);
+
+                    const importedExpenses = data.map(row => {
+                        const category = Object.keys(CATEGORIES).find(key => 
+                            CATEGORIES[key].label === row['Categoría']
+                        ) || 'other';
+
+                        const paymentMethod = Object.keys(PAYMENT_METHODS).find(key =>
+                            PAYMENT_METHODS[key].label === row['Método Pago']
+                        ) || 'other';
+
+                        return {
+                            id: Date.now() + Math.random(),
+                            date: row['Fecha'],
+                            category,
+                            description: row['Descripción'] || '',
+                            odometer: parseFloat(row['Kilometraje'] || 0),
+                            amount: parseFloat(row['Importe Pagado'] || 0),
+                            paymentMethod,
+                            immediateDiscount: parseFloat(row['Dto. Inmediato'] || 0),
+                            deferredCashback: parseFloat(row['Cashback Diferido'] || 0),
+                            liters: parseFloat(row['Litros'] || 0),
+                            pricePerLiter: parseFloat(row['Precio/L Visible'] || 0),
+                            notes: row['Notas'] || '',
+                            createdAt: new Date().toISOString()
+                        };
+                    });
+
+                    expenses = [...importedExpenses, ...expenses].sort((a, b) => 
+                        new Date(b.date) - new Date(a.date)
+                    );
+
+                    saveData();
+                    updateDashboard();
+                    renderExpensesList();
+                    renderStats();
+
+                    alert(`${importedExpenses.length} gastos importados correctamente`);
+                } catch (error) {
+                    alert('Error al importar el archivo. Asegúrate de que sea un Excel válido.');
+                    console.error(error);
+                }
+            };
+            reader.readAsBinaryString(file);
+
+            // Reset input
+            event.target.value = '';
+        }
+
+        // Inicializar
+        window.addEventListener('DOMContentLoaded', () => {
+            loadData();
+            toggleFuelFields();
+            registerServiceWorker();
+            initInstallPrompt();
+        });
+
+        // === PWA FUNCTIONALITY ===
+
+        let deferredPrompt;
+
+        // Registrar service worker
+        function registerServiceWorker() {
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(registration => {
+                        console.log('Service Worker registrado:', registration);
+                    })
+                    .catch(error => {
+                        console.log('Error al registrar Service Worker:', error);
+                    });
+            }
+        }
+
+        // Inicializar prompt de instalación
+        function initInstallPrompt() {
+            window.addEventListener('beforeinstallprompt', (e) => {
+                // Prevenir que Chrome 67 y anteriores muestren el prompt automáticamente
+                e.preventDefault();
+                // Guardar el evento para usarlo después
+                deferredPrompt = e;
+                // Mostrar el banner de instalación
+                document.getElementById('installBanner').classList.remove('hidden');
+            });
+
+            // Detectar cuando la app se instala
+            window.addEventListener('appinstalled', () => {
+                console.log('App instalada');
+                document.getElementById('installBanner').classList.add('hidden');
+                deferredPrompt = null;
+            });
+        }
+
+        // Instalar PWA
+        function installPWA() {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then((choiceResult) => {
+                    if (choiceResult.outcome === 'accepted') {
+                        console.log('Usuario aceptó la instalación');
+                    }
+                    deferredPrompt = null;
+                    document.getElementById('installBanner').classList.add('hidden');
+                });
+            }
+        }
+
+        // Cerrar banner de instalación
+        function closeInstallBanner() {
+            document.getElementById('installBanner').classList.add('hidden');
+        }
+    </script>
+</body>
+</html>
