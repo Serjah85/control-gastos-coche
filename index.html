@@ -226,6 +226,10 @@
     .pm-ing { background:#ff6200; color:white; }
     .pm-carrefour { background:#0057a0; color:white; }
     .pm-other { background:#e0e0e0; color:#555; }
+    .pm-bp { background:#009639; color:white; }
+    .pm-repsol { background:#fbba00; color:#2c3e50; }
+    .pm-shell { background:#dd1d21; color:white; }
+    .pm-moeve { background:#00aeef; color:#003a4a; }
 
     .expense-actions { margin-top: 10px; display:flex; gap: 8px; flex-wrap:wrap; }
     .expense-actions .btn { padding: 7px 10px; font-size: 12px; }
@@ -515,16 +519,55 @@
                 <div class="info-text">Precio que aparece en surtidor/ticket</div>
               </div>
             </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>Gasolinera</label>
+                <select id="station" onchange="onStationChange()">
+                  <option value="carrefour">Carrefour</option>
+                  <option value="galp">Galp</option>
+                  <option value="bp">BP</option>
+                  <option value="shell">Shell</option>
+                  <option value="repsol">Repsol</option>
+                  <option value="moeve">MOEVE</option>
+                  <option value="other">Otra</option>
+                </select>
+                <div class="info-text">Se usa para el cálculo inteligente de descuentos.</div>
+              </div>
+            </div>
+
+            <div class="form-group" id="galpLoyaltyWrap" style="display:none;">
+              <label>Programa fidelización Galp</label>
+              <select id="galpLoyalty" onchange="updatePreview()">
+                <option value="none">Ninguno</option>
+                <option value="lidlPlus">LIDL Plus (4%, máx 4€, máx 60L)</option>
+                <option value="mundoGalp">Mundo Galp Basic (10 cts/L, máx 40L)</option>
+              </select>
+              <div class="info-text">LIDL Plus y Mundo Galp NO son compatibles entre sí. Según tus reglas, LIDL Plus no combina con ING 3%.</div>
+            </div>
+
+            <div class="form-group" id="bpFuelTypeWrap" style="display:none;">
+              <label>Tipo carburante BP</label>
+              <select id="bpFuelType" onchange="updatePreview()">
+                <option value="normal">BP Normal (3 cts/L)</option>
+                <option value="ultimate">BP Ultimate (3 + bonus)</option>
+              </select>
+              <div class="info-text">Ultimate 30-59L: 7 cts/L | Ultimate 60L+: 10 cts/L</div>
+            </div>
+
           </div>
 
           <div class="form-group">
             <label>Método de pago</label>
             <select id="paymentMethod" onchange="onPaymentMethodChange()">
               <option value="other">Otro</option>
-              <option value="carrefour">Carrefour (8% cheque ahorro en combustible)</option>
-              <option value="ing_galp">ING (Galp 3% cashback)</option>
-            </select>
-            <div class="info-text">Reglas automáticas: Carrefour 8% (solo combustible), ING 3% (solo Galp).</div>
+              <option value="ing">ING</option>
+              <option value="carrefour">Carrefour</option>
+              <option value="bp">BP Plus</option>
+              <option value="shell">Shell Smart</option>
+              <option value="repsol">Repsol Waylet</option>
+              <option value="moeve">MOEVE Club</option></select>
+            <div class="info-text">El sistema recomienda el mejor ahorro según Gasolinera + Pago + Fidelización (Galp LIDL/Mundo Galp+ING, BP Plus, Shell+ING, Carrefour 8%).</div>
           </div>
 
           <div class="form-row">
@@ -549,6 +592,11 @@
           <div id="previewBox" class="preview-box hidden">
             <h3>Vista previa del gasto</h3>
             <div id="previewContent"></div>
+          </div>
+
+          <div id="smartRecommendation" class="preview-box hidden" style="margin-top:15px; background:#e8f5e9; border-color:#4caf50;">
+            <h3 style="color:#2e7d32; margin-bottom:10px;">💡 Recomendación Inteligente</h3>
+            <div id="smartRecommendationContent"></div>
           </div>
 
           <div class="button-group">
@@ -642,42 +690,176 @@
     };
 
     const PAYMENT_METHODS = {
-      other: { label:"Otro", pmClass:"pm-other" },
-      carrefour: { label:"Carrefour 8%", pmClass:"pm-carrefour" },
-      ing_galp: { label:"ING Galp 3%", pmClass:"pm-ing" }
+      ing: { label: "ING", color: "#ff6200", pmClass: "pm-ing", cashbackGalp: 0.03, cashbackShell: 0.03 },
+      carrefour: { label: "Carrefour", color: "#0057a0", pmClass: "pm-carrefour" },
+      bp: { label: "BP Plus", color: "#009639", pmClass: "pm-bp" },
+      repsol: { label: "Repsol Waylet", color: "#fbba00", pmClass: "pm-repsol" },
+      moeve: { label: "MOEVE Club", color: "#00aeef", pmClass: "pm-moeve" },
+      shell: { label: "Shell Smart", color: "#dd1d21", pmClass: "pm-shell" },
+      other: { label: "Otro", color: "#95a5a6", pmClass: "pm-other" }
     };
 
+    const LOYALTY_PROGRAMS = {
+      galp: {
+        lidlPlus: {
+          label: "LIDL Plus (4%)",
+          type: "percentage",
+          value: 0.04,
+          maxAmount: 4,
+          maxLiters: 60
+        },
+        mundoGalp: {
+          label: "Mundo Galp Basic (10 cts/L)",
+          type: "perLiter",
+          value: 0.10,
+          maxLiters: 40,
+          maxLitersMonth: 200
+        }
+      }
+    };
+
+    /**
+     * Motor inteligente de descuentos.
+     * Devuelve la mejor opción y alternativas (si existen) para el repostaje.
+     *
+     * @param {number} amount Importe pagado (ticket)
+     * @param {number} liters Litros repostados
+     * @param {string} station Estación: "carrefour"|"galp"|"bp"|"shell"|"repsol"|"moeve"|"other"
+     * @param {string} paymentMethod Método de pago: "ing"|"carrefour"|"bp"|"repsol"|"moeve"|"shell"|"other"
+     * @param {string} galpLoyalty "none"|"lidlPlus"|"mundoGalp"
+     * @param {string} bpFuelType "normal"|"ultimate"
+     */
+    function calcSmartDiscounts(amount, liters, station, paymentMethod, galpLoyalty, bpFuelType) {
+      const options = [];
+
+      // GALP
+      if (station === "galp" && amount > 0 && liters > 0) {
+        const ingCashback = (paymentMethod === "ing") ? amount * 0.03 : 0;
+
+        // LIDL Plus 4% (máx 4€ y máx 60L) — NO compatible con Mundo Galp ni ING (según tus reglas)
+        if (galpLoyalty === "lidlPlus") {
+          const lidlDiscount = Math.min(amount * 0.04, 4);
+          if (liters <= 60 && lidlDiscount > 0) {
+            options.push({
+              name: "LIDL Plus",
+              total: lidlDiscount,
+              breakdown: `4% descuento inmediato = ${lidlDiscount.toFixed(2)}€`,
+              warning: "⚠️ No compatible con Mundo Galp ni ING 3%"
+            });
+          }
+        }
+
+        // Mundo Galp Basic 10 cts/L (máx 40L por repostaje) + ING 3% (compatible)
+        if (galpLoyalty === "mundoGalp") {
+          const litersApplied = Math.min(liters, 40);
+          const mundoDiscount = litersApplied * 0.10;
+          const total = mundoDiscount + ingCashback;
+
+          options.push({
+            name: "Mundo Galp + ING",
+            total: total,
+            breakdown:
+              `Mundo Galp: ${litersApplied.toFixed(2)}L × 0.10€ = ${mundoDiscount.toFixed(2)}€\n` +
+              `ING 3%: ${amount.toFixed(2)}€ × 0.03 = ${ingCashback.toFixed(2)}€`,
+            compatible: true
+          });
+        }
+
+        // Solo ING 3% (si no hay fidelización)
+        if (galpLoyalty === "none" && ingCashback > 0) {
+          options.push({
+            name: "Solo ING 3%",
+            total: ingCashback,
+            breakdown: `${amount.toFixed(2)}€ × 0.03 = ${ingCashback.toFixed(2)}€`
+          });
+        }
+      }
+
+      // BP PLUS
+      if (station === "bp" && liters > 0) {
+        let perLiter = 0.03; // normal 3 cts/L
+        if (bpFuelType === "ultimate") {
+          if (liters >= 60) perLiter = 0.10;
+          else if (liters >= 30) perLiter = 0.07;
+        }
+        const bpDiscount = liters * perLiter;
+
+        options.push({
+          name: "BP Plus",
+          total: bpDiscount,
+          breakdown: `${liters.toFixed(2)}L × ${perLiter.toFixed(3)}€/L = ${bpDiscount.toFixed(2)}€`,
+          note: (bpFuelType === "ultimate" && liters >= 30)
+            ? `✅ Bonus Ultimate activado (${liters >= 60 ? "10" : "7"} cts/L)`
+            : ""
+        });
+      }
+
+      // SHELL + ING 3%
+      if (station === "shell" && paymentMethod === "ing" && amount > 0) {
+        const shellCashback = amount * 0.03;
+        options.push({
+          name: "Shell + ING 3%",
+          total: shellCashback,
+          breakdown: `${amount.toFixed(2)}€ × 0.03 = ${shellCashback.toFixed(2)}€`
+        });
+      }
+
+      // CARREFOUR (regla clásica 8% cheque ahorro en combustible)
+      if (station === "carrefour" && amount > 0) {
+        const carrefourDeferred = amount * 0.08;
+        options.push({
+          name: "Carrefour Cheque Ahorro 8%",
+          total: carrefourDeferred,
+          breakdown: `${amount.toFixed(2)}€ × 0.08 = ${carrefourDeferred.toFixed(2)}€`
+        });
+      }
+
+      options.sort((a, b) => b.total - a.total);
+
+      const best = options[0] || null;
+      const alternatives = options.slice(1);
+
+      let recommendation = "";
+      if (best && alternatives.length) {
+        const diff = best.total - alternatives[0].total;
+        recommendation = (diff > 0.50)
+          ? `🏆 Mejor opción: ${best.name} (ahorras ${diff.toFixed(2)}€ más)`
+          : `Las opciones son similares (diferencia: ${diff.toFixed(2)}€)`;
+      }
+
+      return { best, alternatives, recommendation, allOptions: options };
+    }
+
+
     // Reglas automáticas (las que tú has definido)
+    
+    // Cálculo de descuentos/cashbacks (inmediato + manual + motor inteligente)
     function autoCashback(expense) {
       const amount = Number(expense.amount || 0);
       const immediate = Number(expense.immediateDiscount || 0);
       const manualDeferred = Number(expense.deferredCashbackManual || 0);
 
-      let autoDeferred = 0;
-      let autoBankCashback = 0;
+      const liters = Number(expense.liters || 0);
+      const station = expense.station || "other";
+      const paymentMethod = expense.paymentMethod || "other";
+      const galpLoyalty = expense.galpLoyalty || "none";
+      const bpFuelType = expense.bpFuelType || "normal";
 
-      // Carrefour 8% SOLO en combustible
-      if (expense.paymentMethod === "carrefour" && expense.category === "fuel") {
-        autoDeferred = amount * 0.08;
-      }
+      // Motor inteligente (devuelve el mejor total de ahorro posible según la combinación)
+      const smart = calcSmartDiscounts(amount, liters, station, paymentMethod, galpLoyalty, bpFuelType);
+      const smartBestTotal = smart && smart.best ? Number(smart.best.total || 0) : 0;
 
-      // ING 3% SOLO si método ING Galp
-      if (expense.paymentMethod === "ing_galp") {
-        autoBankCashback = amount * 0.03;
-      }
-
-      const totalCashback = immediate + manualDeferred + autoDeferred + autoBankCashback;
+      const totalCashback = immediate + manualDeferred + smartBestTotal;
 
       return {
         immediate,
         manualDeferred,
-        autoDeferred,
-        autoBankCashback,
+        smart,           // objeto completo (best + alternativas)
+        smartBestTotal,  // número
         totalCashback
       };
     }
-
-    /******************************************************************
+/******************************************************************
      * STATE
      ******************************************************************/
     let cars = [];
@@ -871,6 +1053,35 @@
     function onCategoryChange() {
       const cat = document.getElementById("category").value;
       document.getElementById("fuelFields").style.display = (cat === "fuel") ? "block" : "none";
+      onStationChange(); // muestra/oculta fidelización según estación
+      updatePreview();
+    }
+
+    function onStationChange() {
+      const cat = document.getElementById("category").value;
+      const stEl = document.getElementById("station");
+      const st = stEl ? stEl.value : "other";
+
+      const galpWrap = document.getElementById("galpLoyaltyWrap");
+      const showGalp = (cat === "fuel" && st === "galp");
+      if (galpWrap) {
+        galpWrap.style.display = showGalp ? "block" : "none";
+        if (!showGalp) {
+          const gl = document.getElementById("galpLoyalty");
+          if (gl) gl.value = "none";
+        }
+      }
+
+      const bpWrap = document.getElementById("bpFuelTypeWrap");
+      const showBP = (cat === "fuel" && st === "bp");
+      if (bpWrap) {
+        bpWrap.style.display = showBP ? "block" : "none";
+        if (!showBP) {
+          const bf = document.getElementById("bpFuelType");
+          if (bf) bf.value = "normal";
+        }
+      }
+
       updatePreview();
     }
 
@@ -896,6 +1107,9 @@
         odometer: Number(document.getElementById("odometer").value),
         liters: Number(document.getElementById("liters").value || 0),
         pricePerLiter: Number(document.getElementById("pricePerLiter").value || 0),
+        station: (document.getElementById("station") ? document.getElementById("station").value : "other"),
+        galpLoyalty: (document.getElementById("galpLoyalty") ? document.getElementById("galpLoyalty").value : "none"),
+        bpFuelType: (document.getElementById("bpFuelType") ? document.getElementById("bpFuelType").value : "normal"),
         paymentMethod: document.getElementById("paymentMethod").value,
         immediateDiscount: Number(document.getElementById("immediateDiscount").value || 0),
         deferredCashbackManual: Number(document.getElementById("deferredCashbackManual").value || 0),
@@ -930,6 +1144,9 @@
       document.getElementById("date").valueAsDate = new Date();
       document.getElementById("category").value = "fuel";
       document.getElementById("paymentMethod").value = "other";
+      if (document.getElementById("station")) document.getElementById("station").value = "carrefour";
+      if (document.getElementById("galpLoyalty")) document.getElementById("galpLoyalty").value = "none";
+      if (document.getElementById("bpFuelType")) document.getElementById("bpFuelType").value = "normal";
       document.getElementById("immediateDiscount").value = "0";
       document.getElementById("deferredCashbackManual").value = "0";
       document.getElementById("previewBox").classList.add("hidden");
@@ -956,6 +1173,9 @@
       document.getElementById("odometer").value = e.odometer;
       document.getElementById("liters").value = e.liters || "";
       document.getElementById("pricePerLiter").value = e.pricePerLiter || "";
+      if (document.getElementById("station")) document.getElementById("station").value = e.station || "carrefour";
+      if (document.getElementById("galpLoyalty")) document.getElementById("galpLoyalty").value = e.galpLoyalty || "none";
+      if (document.getElementById("bpFuelType")) document.getElementById("bpFuelType").value = e.bpFuelType || "normal";
       document.getElementById("paymentMethod").value = e.paymentMethod || "other";
       document.getElementById("immediateDiscount").value = e.immediateDiscount || 0;
       document.getElementById("deferredCashbackManual").value = e.deferredCashbackManual || 0;
@@ -982,18 +1202,29 @@
      ******************************************************************/
     function updatePreview() {
       const amount = Number(document.getElementById("amount").value || 0);
+      const cat = document.getElementById("category").value;
+
+      // Limpia recomendaciones si no hay datos
+      const recBox = document.getElementById("smartRecommendation");
+      if (recBox) recBox.classList.add("hidden");
+
       if (!amount) {
         document.getElementById("previewBox").classList.add("hidden");
         return;
       }
 
+      const liters = Number(document.getElementById("liters").value || 0);
+
       const expense = {
         amount,
-        category: document.getElementById("category").value,
+        category: cat,
+        station: (document.getElementById("station") ? document.getElementById("station").value : "other"),
         paymentMethod: document.getElementById("paymentMethod").value,
+        galpLoyalty: (document.getElementById("galpLoyalty") ? document.getElementById("galpLoyalty").value : "none"),
+        bpFuelType: (document.getElementById("bpFuelType") ? document.getElementById("bpFuelType").value : "normal"),
         immediateDiscount: Number(document.getElementById("immediateDiscount").value || 0),
         deferredCashbackManual: Number(document.getElementById("deferredCashbackManual").value || 0),
-        liters: Number(document.getElementById("liters").value || 0)
+        liters
       };
 
       const cb = autoCashback(expense);
@@ -1007,12 +1238,9 @@
         html += `<div class="preview-row"><span>- Descuento inmediato:</span><span>-${cb.immediate.toFixed(2)} €</span></div>`;
       }
 
-      if (cb.autoBankCashback > 0) {
-        html += `<div class="preview-row"><span>- Cashback banco (ING 3%):</span><span>-${cb.autoBankCashback.toFixed(2)} €</span></div>`;
-      }
-
-      if (cb.autoDeferred > 0) {
-        html += `<div class="preview-row"><span>- Cheque ahorro (Carrefour 8%):</span><span>-${cb.autoDeferred.toFixed(2)} €</span></div>`;
+      if (cb.smartBestTotal > 0) {
+        const bestName = (cb.smart && cb.smart.best && cb.smart.best.name) ? cb.smart.best.name : "Ahorro inteligente";
+        html += `<div class="preview-row"><span>- ${escapeHtml(bestName)}:</span><span>-${cb.smartBestTotal.toFixed(2)} €</span></div>`;
       }
 
       if (cb.manualDeferred > 0) {
@@ -1021,14 +1249,46 @@
 
       html += `<div class="preview-row"><span><strong>Coste real:</strong></span><span><strong>${realCost.toFixed(2)} €</strong></span></div>`;
 
-      if (expense.category === "fuel" && expense.liters > 0) {
-        const realPrice = realCost / expense.liters;
+      if (cat === "fuel" && liters > 0) {
+        const realPrice = realCost / liters;
         html += `<div class="preview-row"><span>Precio real por litro:</span><span>${realPrice.toFixed(3)} €/L</span></div>`;
       }
 
       document.getElementById("previewContent").innerHTML = html;
       document.getElementById("previewBox").classList.remove("hidden");
+
+      // Recomendación inteligente (solo combustible y con datos mínimos)
+      if (cat === "fuel" && liters > 0) {
+        const smart = cb.smart;
+        if (smart && smart.best) {
+          const best = smart.best;
+          const alt = smart.alternatives || [];
+          let recHtml = `
+            <div style="margin-bottom:8px;"><strong>${escapeHtml(smart.recommendation || ("Mejor opción: " + best.name))}</strong></div>
+            <div style="white-space:pre-line; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; background:#fff; padding:10px; border-radius:10px; border:1px solid #c8e6c9;">
+              ${escapeHtml(best.breakdown || "")}
+            </div>
+          `;
+          if (best.warning) {
+            recHtml += `<div class="info-text" style="margin-top:8px;color:#b71c1c;"><strong>${escapeHtml(best.warning)}</strong></div>`;
+          }
+          if (best.note) {
+            recHtml += `<div class="info-text" style="margin-top:8px;color:#1b5e20;"><strong>${escapeHtml(best.note)}</strong></div>`;
+          }
+
+          if (alt.length) {
+            recHtml += `<div style="margin-top:10px;"><strong>Alternativas:</strong></div>`;
+            alt.slice(0,3).forEach(a => {
+              recHtml += `<div class="preview-row"><span>${escapeHtml(a.name)}</span><span>-${Number(a.total||0).toFixed(2)} €</span></div>`;
+            });
+          }
+
+          document.getElementById("smartRecommendationContent").innerHTML = recHtml;
+          document.getElementById("smartRecommendation").classList.remove("hidden");
+        }
+      }
     }
+
 
     /******************************************************************
      * LIST
@@ -1219,8 +1479,11 @@
           "Método pago": (PAYMENT_METHODS[e.paymentMethod] || PAYMENT_METHODS.other).label,
           "Dto inmediato": cb.immediate.toFixed(2),
           "Diferido manual": cb.manualDeferred.toFixed(2),
-          "Cheque Carrefour auto": cb.autoDeferred.toFixed(2),
-          "Cashback ING auto": cb.autoBankCashback.toFixed(2),
+          "Gasolinera": (e.station || "other"),
+          "Galp fidelización": (e.galpLoyalty || "none"),
+          "BP tipo": (e.bpFuelType || "normal"),
+          "Smart mejor opción": (cb.smart && cb.smart.best ? cb.smart.best.name : ""),
+          "Smart ahorro": (cb.smartBestTotal || 0).toFixed(2),
           "Cashback total": cb.totalCashback.toFixed(2),
           "Coste real": real.toFixed(2),
           "Litros": e.liters ? Number(e.liters).toFixed(2) : "",
@@ -1277,6 +1540,9 @@
               deferredCashbackManual: Number(row["Diferido manual"] || row["Cashback Diferido"] || 0),
               liters: Number(row["Litros"] || 0),
               pricePerLiter: Number(row["Precio/L visible"] || row["Precio/L Visible"] || 0),
+              station: String(row["Gasolinera"] || row["station"] || "other").toLowerCase(),
+              galpLoyalty: String(row["Galp fidelización"] || row["galpLoyalty"] || "none"),
+              bpFuelType: String(row["BP tipo"] || row["bpFuelType"] || "normal"),
               notes: String(row["Notas"] || ""),
               createdAt: new Date().toISOString()
             };
@@ -1418,11 +1684,20 @@
         if (parsed.liters) document.getElementById("liters").value = parsed.liters.toFixed(2);
         if (parsed.pricePerLiter) document.getElementById("pricePerLiter").value = parsed.pricePerLiter.toFixed(3);
 
-        // sugerencias
+        // sugerencias (OCR)
+        document.getElementById("category").value = "fuel";
+        onCategoryChange();
+
+        if (parsed.station && document.getElementById("station")) {
+          document.getElementById("station").value = parsed.station;
+          onStationChange();
+        }
+
+        // si detecta Carrefour, sugiere método Carrefour (puedes cambiarlo luego)
         if (parsed.suggestCarrefour) {
           document.getElementById("paymentMethod").value = "carrefour";
-          document.getElementById("category").value = "fuel";
-          onCategoryChange();
+      if (document.getElementById("station")) document.getElementById("station").value = "carrefour";
+      onStationChange();
         }
 
         updatePreview();
@@ -1494,14 +1769,25 @@
         if (mL) liters = Number(mL[1]);
       }
 
-      // Sugerencia método: si aparece CARREFOUR
-      const suggestCarrefour = /CARREFOUR/i.test(t);
+      // Sugerencias: estación por texto del ticket
+      const station =
+        /CARREFOUR/i.test(t) ? "carrefour" :
+        /GALP/i.test(t) ? "galp" :
+        /BP/i.test(t) ? "bp" :
+        /SHELL/i.test(t) ? "shell" :
+        /REPSOL/i.test(t) ? "repsol" :
+        (/MOEVE/i.test(t) || /CEPSA/i.test(t)) ? "moeve" :
+        "other";
+
+      // Sugerencia pago (si aparece CARREFOUR suele ser Carrefour Club)
+      const suggestCarrefour = station === "carrefour";
 
       return {
         date,
         amount,
         liters,
         pricePerLiter,
+        station,
         suggestCarrefour
       };
     }
@@ -1529,6 +1815,8 @@
     function fillOcrDemo() {
       document.getElementById("category").value = "fuel";
       document.getElementById("paymentMethod").value = "carrefour";
+      if (document.getElementById("station")) document.getElementById("station").value = "carrefour";
+      onStationChange();
       document.getElementById("amount").value = "74.03";
       document.getElementById("liters").value = "53.30";
       document.getElementById("pricePerLiter").value = "1.389";
